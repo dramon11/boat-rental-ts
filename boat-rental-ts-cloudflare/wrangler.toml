@@ -1,17 +1,16 @@
 name = "boat-rental-system"
 main = "src/index.ts"
-compatibility_date = "2025-10-01"
-compatibility_flags = [ "nodejs_compat" ]
+compatibility_date = "2026-02-18"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "boat_rental_db"
-database_id = "PON_TU_DATABASE_ID_AQUI"  # Crea en Cloudflare Dashboard
-
-[[kv_namespaces]]
-binding = "SESSION_KV"
-id = "PON_TU_KV_ID_AQUI"  # Crea un KV para sesiones (opcional, pero útil)
-preview_id = "PON_TU_KV_ID_AQUI"
+database_id = "PON_TU_DATABASE_ID_AQUI"   # ← cámbialo por tu ID real de D1
 
 [vars]
-JWT_SECRET = "cambia-esto-por-un-secreto-fuerte"  # Para JWT auth
+JWT_SECRET = "tu-secreto-super-largo-y-seguro-2026-aqui"
+
+# Opcional: si usas KV para sesiones
+# [[kv_namespaces]]
+# binding = "SESSION_KV"
+# id = "tu-kv-id-aqui"

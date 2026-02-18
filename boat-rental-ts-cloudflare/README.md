@@ -1,16 +1,13 @@
-# Sistema de Alquiler de Botes y Jetskis - Cloudflare Workers (TypeScript + Hono + D1)
+# Alquiler Botes y Jetskis - Cloudflare Workers
 
-Sistema profesional con dashboard y módulos en modo oscuro.
+## Pasos rápidos
 
-## Instalación
-- npm install
-- Configura wrangler.toml con IDs de D1 y KV.
-- wrangler d1 migrations apply boat_rental_db
-- wrangler dev (para testing local)
-- wrangler deploy
+1. Crea DB D1 en Cloudflare → copia database_id a wrangler.toml
+2. npm install
+3. wrangler dev               → prueba local
+4. wrangler deploy            → producción
+5. Accede: https://tu-worker.tu-cuenta.workers.dev/login
 
-## Features
-- Auth con JWT.
-- Dark theme profesional con Bootstrap.
-- CRUD para todos los módulos.
-- Extiende con JS para interacciones dinámicas si necesitas.
+Usuario: admin / admin (cambia en prod)
+
+¡Listo para GitHub y Cloudflare!
