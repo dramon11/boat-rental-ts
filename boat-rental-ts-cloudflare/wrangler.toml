@@ -5,10 +5,10 @@ compatibility_date = "2026-02-18"
 [[d1_databases]]
 binding = "DB"
 database_name = "boat_rental_db"
-database_id = "PON_TU_DATABASE_ID_AQUI"   # ← cámbialo por tu ID real de D1
+database_id = "boats"   # ← cámbialo por tu ID real de D1
 
 [vars]
-JWT_SECRET = "tu-secreto-super-largo-y-seguro-2026-aqui"
+JWT_SECRET = "321654"
 
 # Opcional: si usas KV para sesiones
 # [[kv_namespaces]]
