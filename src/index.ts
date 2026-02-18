@@ -11,7 +11,7 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-# // ── Middleware de autenticación ────────────────────────────────────────────
+
 const auth = async (c: any, next: any) => {
   const token = c.req.header('Authorization')?.split(' ')[1]
   if (!token) {
@@ -26,7 +26,7 @@ const auth = async (c: any, next: any) => {
   }
 }
 
-# // ── Página de Login ────────────────────────────────────────────────────────
+
 app.get('/login', (c) => c.html(html`
 <!doctype html>
 <html data-bs-theme="dark" lang="es">
@@ -65,7 +65,7 @@ app.get('/login', (c) => c.html(html`
 </html>
 `)}
 
-# // ── API Login (placeholder - contraseña sin hash) ───────────────────────────
+
 app.post('/api/login', zValidator('form', z.object({
   username: z.string().min(1),
   password: z.string().min(1)
@@ -81,7 +81,7 @@ app.post('/api/login', zValidator('form', z.object({
   return c.json({ token })
 })
 
-# // ── Dashboard ──────────────────────────────────────────────────────────────
+
 app.get('/', auth, async (c) => {
   const [reservations, income, availableBoats] = await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) as count FROM reservations').first('count'),
@@ -157,7 +157,7 @@ app.get('/', auth, async (c) => {
   `)
 }
 
-# // ── Clientes ───────────────────────────────────────────────────────────────
+
 app.get('/clients', auth, async (c) => {
   const clients = await c.env.DB.prepare('SELECT * FROM clients ORDER BY name').all().then(r => r.results || [])
 
@@ -226,7 +226,7 @@ app.post('/api/clients', auth, zValidator('form', z.object({
   return c.redirect('/clients')
 })
 
-# // ── Botes ──────────────────────────────────────────────────────────────────
+
 app.get('/boats', auth, async (c) => {
   const boats = await c.env.DB.prepare('SELECT * FROM boats ORDER BY name').all().then(r => r.results || [])
 
@@ -301,7 +301,7 @@ app.post('/api/boats', auth, zValidator('form', z.object({
   return c.redirect('/boats')
 })
 
-# // ── Reservas ───────────────────────────────────────────────────────────────
+
 app.get('/reservations', auth, async (c) => {
   const reservations = await c.env.DB.prepare('SELECT * FROM reservations ORDER BY start_date DESC').all().then(r => r.results || [])
 
@@ -376,7 +376,7 @@ app.post('/api/reservations', auth, zValidator('form', z.object({
   return c.redirect('/reservations')
 })
 
-# // ── Facturas ───────────────────────────────────────────────────────────────
+
 app.get('/invoices', auth, async (c) => {
   const invoices = await c.env.DB.prepare('SELECT * FROM invoices ORDER BY date DESC').all().then(r => r.results || [])
 
@@ -442,7 +442,6 @@ app.post('/api/invoices', auth, zValidator('form', z.object({
   return c.redirect('/invoices')
 })
 
-# // ── Caja (Pagos) ───────────────────────────────────────────────────────────
 app.get('/cash', auth, async (c) => {
   const transactions = await c.env.DB.prepare('SELECT * FROM cash_transactions ORDER BY date DESC').all().then(r => r.results || [])
 
@@ -517,7 +516,6 @@ app.post('/api/cash', auth, zValidator('form', z.object({
   return c.redirect('/cash')
 })
 
-# // ── Reportes ───────────────────────────────────────────────────────────────
 app.get('/reports', auth, async (c) => {
   const incomeByMonth = await c.env.DB.prepare(`
     SELECT strftime('%Y-%m', date) as mes, SUM(amount) as total 
@@ -582,7 +580,7 @@ app.get('/reports', auth, async (c) => {
 </html>
   `}
 
-# // ── Mantenimiento ──────────────────────────────────────────────────────────
+
 app.get('/maintenance', auth, async (c) => {
   const maintenances = await c.env.DB.prepare('SELECT * FROM maintenances ORDER BY date DESC').all().then(r => r.results || [])
 
