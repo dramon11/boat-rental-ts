@@ -63,7 +63,7 @@ app.get('/login', (c) => c.html(html`
   </div>
 </body>
 </html>
-`)}
+`)
 
 
 app.post('/api/login', zValidator('form', z.object({
