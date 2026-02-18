@@ -11,12 +11,12 @@
     {
       "binding": "DB",
       "database_name": "boat_rental_db",
-      "database_id": "tu-database-id-real-aqui"    // ← pon tu ID de D1
+      "database_id": "boat"    // ← pon tu ID de D1
     }
   ],
 
   "vars": {
-    "JWT_SECRET": "cambia-esto-por-un-secreto-muy-largo-y-seguro-2026"
+    "JWT_SECRET": "seguro-2026"
   }
 
   // Si usas KV, agrégalo aquí
