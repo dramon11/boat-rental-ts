@@ -1,6 +1,3 @@
-# // src/index.ts - Sistema completo de alquiler de botes y jetskis
-# // Tema oscuro profesional - Todos los módulos implementados
-
 import { Hono } from 'hono'
 import { html } from 'hono/html'
 import { zValidator } from '@hono/zod-validator'
