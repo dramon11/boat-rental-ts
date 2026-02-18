@@ -1,12 +1,11 @@
 name = "boat-rental-system"
 main = "src/index.ts"
 compatibility_date = "2026-02-18"
-compatibility_flags = [ "nodejs_compat" ]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "boat_rental_db"
-database_id = "userId"
+database_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"   # ← UUID REAL AQUÍ
 
 [vars]
 JWT_SECRET = "seguro-2026"
