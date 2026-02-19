@@ -141,7 +141,7 @@ app.post(
       const hashedPassword = await sha256(password)
 
       if (hashedPassword !== user.password_hash) {
-        return c.html('<h4 class="text-center text-white mt-5">Contraseña incorrecta</h4>', 401)
+        return c.html('<h4 class="text-center text-white mt-5">Contraseña incorrecta</h4>', hashedPassword,401)
       }
 
       const secret = new TextEncoder().encode(c.env.JWT_SECRET)
