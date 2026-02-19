@@ -125,7 +125,8 @@ app.post(
 
     try {
 
-      const { username, password } = c.req.valid()
+      //const { username, password } = c.req.valid()
+      const { username, password } = c.req.valid('form')
 
       const user = await c.env.DB.prepare(
         'SELECT id, password_hash FROM users WHERE username = ?'
