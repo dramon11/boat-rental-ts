@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { html } from 'hono/html'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-/*import { SignJWT, jwtVerify } from 'jose'
 
 type Bindings = {
   DB: D1Database
