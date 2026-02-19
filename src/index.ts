@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { html } from 'hono/html'
 import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
+import { z } from 'zod' 
 
 type Bindings = {
   DB: D1Database
