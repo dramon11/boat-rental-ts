@@ -11,11 +11,12 @@
     {
       "binding": "DB",
       "database_name": "boat_rental_db",
-      "database_id": "1"      // Asegúrate de que sea el UUID correcto
+      "database_id": "2c401729-ca10-4885-8172-bf024696e8c3"      // Asegúrate de que sea el UUID correcto
     }
   ],
 
   "vars": {
     "JWT_SECRET": "seguro-2026"                     // Cámbialo por algo más fuerte
   }
+
 }
