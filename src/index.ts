@@ -12,13 +12,25 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 /* ================================
+   UTIL: HASH PASSWORD (SHA-256)
+================================ */
+
+async function sha256(text: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(text)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/* ================================
    AUTH MIDDLEWARE
 ================================ */
 
 const auth = async (c: any, next: () => Promise<void>) => {
 
   const token = getCookie(c, 'auth_token')
-
   if (!token) return c.redirect('/login')
 
   try {
@@ -26,7 +38,7 @@ const auth = async (c: any, next: () => Promise<void>) => {
     const { payload } = await jwtVerify(token, secret)
     c.set('userId', payload.userId)
     await next()
-  } catch {
+  } catch (err) {
     deleteCookie(c, 'auth_token')
     return c.redirect('/login')
   }
@@ -51,8 +63,9 @@ app.get('/login', (c) => {
         .card {
           background:#1e293b;
           border-radius:16px;
+          border:none;
         }
-        h3 {
+        h3, label {
           color:#ffffff !important;
         }
       </style>
@@ -81,7 +94,7 @@ app.get('/login', (c) => {
                   placeholder="Contraseña"
                   required>
 
-                <button class="btn btn-primary w-100">
+                <button class="btn btn-primary w-100 fw-bold">
                   Entrar
                 </button>
 
@@ -110,34 +123,46 @@ app.post(
   ),
   async (c) => {
 
-    const { username, password } = c.req.valid()
+    try {
 
-    const user = await c.env.DB.prepare(
-      'SELECT id, password_hash FROM users WHERE username = ?'
-    )
-      .bind(username)
-      .first<{ id: number; password_hash: string }>()
+      const { username, password } = c.req.valid()
 
-    if (!user || password !== user.password_hash) {
-      return c.html('<h2 style="color:white;text-align:center;margin-top:50px">Credenciales inválidas</h2>', 401)
+      const user = await c.env.DB.prepare(
+        'SELECT id, password_hash FROM users WHERE username = ?'
+      )
+        .bind(username)
+        .first<{ id: number; password_hash: string }>()
+
+      if (!user) {
+        return c.html('<h4 class="text-center text-white mt-5">Usuario no encontrado</h4>', 401)
+      }
+
+      const hashedPassword = await sha256(password)
+
+      if (hashedPassword !== user.password_hash) {
+        return c.html('<h4 class="text-center text-white mt-5">Contraseña incorrecta</h4>', 401)
+      }
+
+      const secret = new TextEncoder().encode(c.env.JWT_SECRET)
+
+      const token = await new SignJWT({ userId: user.id })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime('24h')
+        .sign(secret)
+
+      setCookie(c, 'auth_token', token, {
+        httpOnly: true,
+        secure: false, // 👉 en producción pon true
+        sameSite: 'Strict',
+        path: '/',
+        maxAge: 60 * 60 * 24
+      })
+
+      return c.redirect('/')
+
+    } catch (err) {
+      return c.text('Internal Server Error: ' + err, 500)
     }
-
-    const secret = new TextEncoder().encode(c.env.JWT_SECRET)
-
-    const token = await new SignJWT({ userId: user.id })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('24h')
-      .sign(secret)
-
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // ⚠️ en producción poner true
-      sameSite: 'Strict',
-      path: '/',
-      maxAge: 60 * 60 * 24
-    })
-
-    return c.redirect('/')
   }
 )
 
@@ -156,79 +181,86 @@ app.get('/logout', (c) => {
 
 app.get('/', auth, async (c) => {
 
-  const [reservations, income, availableBoats] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM reservations')
-      .first<{ count: number }>(),
-    c.env.DB.prepare(
-      'SELECT SUM(amount) as total FROM invoices WHERE paid = 1'
-    ).first<{ total: number | null }>(),
-    c.env.DB.prepare(
-      'SELECT COUNT(*) as count FROM boats WHERE available = 1'
-    ).first<{ count: number }>(),
-  ])
+  try {
 
-  return c.html(html`
-    <!doctype html>
-    <html lang="es">
-    <head>
-      <meta charset="utf-8">
-      <title>Dashboard</title>
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-      <style>
-        body {
-          background: linear-gradient(135deg,#0f172a,#111827);
-          color:white;
-        }
-        .card {
-          background:#1e293b;
-          border-radius:16px;
-        }
-      </style>
-    </head>
-    <body>
+    const [reservations, income, availableBoats] = await Promise.all([
+      c.env.DB.prepare('SELECT COUNT(*) as count FROM reservations')
+        .first<{ count: number }>(),
+      c.env.DB.prepare(
+        'SELECT SUM(amount) as total FROM invoices WHERE paid = 1'
+      ).first<{ total: number | null }>(),
+      c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM boats WHERE available = 1'
+      ).first<{ count: number }>(),
+    ])
 
-      <nav class="navbar navbar-dark bg-dark p-3">
-        <div class="container-fluid">
-          <span class="navbar-brand text-white fw-bold">
-            🚤 Alquiler Botes & Jetskis
-          </span>
-          <a href="/logout" class="btn btn-outline-light btn-sm">
-            Cerrar sesión
-          </a>
+    return c.html(html`
+      <!doctype html>
+      <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>Dashboard</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+          body {
+            background: linear-gradient(135deg,#0f172a,#111827);
+            color:white;
+          }
+          .card {
+            background:#1e293b;
+            border-radius:16px;
+            border:none;
+          }
+        </style>
+      </head>
+      <body>
+
+        <nav class="navbar navbar-dark bg-dark p-3">
+          <div class="container-fluid">
+            <span class="navbar-brand text-white fw-bold">
+              🚤 Alquiler Botes & Jetskis
+            </span>
+            <a href="/logout" class="btn btn-outline-light btn-sm">
+              Cerrar sesión
+            </a>
+          </div>
+        </nav>
+
+        <div class="container mt-5">
+
+          <div class="row g-4">
+
+            <div class="col-md-4">
+              <div class="card p-4 text-center">
+                <h6>Reservas Totales</h6>
+                <h1>${reservations?.count ?? 0}</h1>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="card p-4 text-center">
+                <h6>Ingresos</h6>
+                <h1>$${Number(income?.total ?? 0).toFixed(2)}</h1>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="card p-4 text-center">
+                <h6>Botes Disponibles</h6>
+                <h1>${availableBoats?.count ?? 0}</h1>
+              </div>
+            </div>
+
+          </div>
         </div>
-      </nav>
 
-      <div class="container mt-5">
+      </body>
+      </html>
+    `)
 
-        <div class="row g-4">
-
-          <div class="col-md-4">
-            <div class="card p-4 text-center">
-              <h6>Reservas Totales</h6>
-              <h1>${reservations?.count ?? 0}</h1>
-            </div>
-          </div>
-
-          <div class="col-md-4">
-            <div class="card p-4 text-center">
-              <h6>Ingresos</h6>
-              <h1>$${Number(income?.total ?? 0).toFixed(2)}</h1>
-            </div>
-          </div>
-
-          <div class="col-md-4">
-            <div class="card p-4 text-center">
-              <h6>Botes Disponibles</h6>
-              <h1>${availableBoats?.count ?? 0}</h1>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-    </body>
-    </html>
-  `)
+  } catch (err) {
+    return c.text('Error cargando dashboard: ' + err, 500)
+  }
 })
 
 export default app
