@@ -7,7 +7,7 @@ compatibility_flags = [ "nodejs_compat" ]
 [[d1_databases]]
 binding = "DB"
 database_name = "boat_rental_db"
-database_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"   # ← UUID REAL AQUÍ
+database_id = "2c401729-ca10-4885-8172-bf024696e8c3"   # ← UUID REAL AQUÍ
 
 [vars]
 JWT_SECRET = "seguro-2026"
