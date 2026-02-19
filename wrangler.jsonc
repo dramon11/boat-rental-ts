@@ -10,7 +10,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "boat_rental_db",
+      "database_name": "boats",
       "database_id": "2c401729-ca10-4885-8172-bf024696e8c3"      // Asegúrate de que sea el UUID correcto
     }
   ],
@@ -20,3 +20,4 @@
   }
 
 }
+
