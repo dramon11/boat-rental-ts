@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { html } from 'hono/html'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { sign, verify } from 'jsonwebtoken'
+import { SignJWT, jwtVerify } from 'jose'
 
 type Bindings = {
   DB: D1Database
@@ -11,62 +11,64 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-// Middleware de autenticación mejorado con mejor tipado
+/* ================================
+   AUTH MIDDLEWARE (Workers Safe)
+================================ */
+
 const auth = async (c: any, next: () => Promise<void>) => {
   const authHeader = c.req.header('Authorization')
+
   if (!authHeader?.startsWith('Bearer ')) {
-    return c.html(html`
-      <h1>401 - Inicia sesión</h1>
-      <p><a href="/login">Ir al login</a></p>
-    `, 401)
+    return c.redirect('/login')
   }
 
   const token = authHeader.split(' ')[1]
 
   try {
-    const payload = verify(token, c.env.JWT_SECRET) as { userId: number }
+    const secret = new TextEncoder().encode(c.env.JWT_SECRET)
+
+    const { payload } = await jwtVerify(token, secret)
+
     c.set('userId', payload.userId)
     await next()
   } catch (err) {
-    return c.html(html`
-      <h1>401 - Token inválido o expirado</h1>
-      <p><a href="/login">Ir al login</a></p>
-    `, 401)
+    return c.redirect('/login')
   }
 }
 
-// Página de login
+/* ================================
+   LOGIN PAGE
+================================ */
+
 app.get('/login', (c) => {
   return c.html(html`
     <!doctype html>
-    <html data-bs-theme="dark" lang="es">
+    <html lang="es">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Login - Alquiler Botes & Jetskis</title>
+      <title>Login</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
       <style>
-        body { background: #0d1117; color: #c9d1d9; font-family: system-ui, sans-serif; }
-        .card { background: linear-gradient(135deg, #161b22, #0d1117); }
+        body { background:#0d1117; color:#c9d1d9; }
+        .card { background:#161b22; }
       </style>
     </head>
     <body class="d-flex align-items-center min-vh-100">
       <div class="container">
         <div class="row justify-content-center">
           <div class="col-md-4">
-            <div class="card shadow-lg border-0">
-              <div class="card-body p-5">
-                <h2 class="text-center mb-4">Iniciar Sesión</h2>
-                <form action="/api/login" method="POST">
-                  <div class="mb-4">
-                    <input name="username" class="form-control bg-dark text-white border-secondary" placeholder="Usuario" required autofocus>
-                  </div>
-                  <div class="mb-4">
-                    <input name="password" type="password" class="form-control bg-dark text-white border-secondary" placeholder="Contraseña" required>
-                  </div>
-                  <button type="submit" class="btn btn-primary w-100">Entrar</button>
-                </form>
-              </div>
+            <div class="card p-4 shadow">
+              <h3 class="text-center mb-4">Iniciar Sesión</h3>
+              <form action="/api/login" method="POST">
+                <div class="mb-3">
+                  <input name="username" class="form-control bg-dark text-white border-secondary" placeholder="Usuario" required>
+                </div>
+                <div class="mb-3">
+                  <input name="password" type="password" class="form-control bg-dark text-white border-secondary" placeholder="Contraseña" required>
+                </div>
+                <button class="btn btn-primary w-100">Entrar</button>
+              </form>
             </div>
           </div>
         </div>
@@ -76,175 +78,99 @@ app.get('/login', (c) => {
   `)
 })
 
-// Login API
-app.post('/api/login',
-  zValidator('form', z.object({
-    username: z.string().min(1, 'El usuario es requerido'),
-    password: z.string().min(1, 'La contraseña es requerida')
-  })),
+/* ================================
+   LOGIN API
+================================ */
+
+app.post(
+  '/api/login',
+  zValidator(
+    'form',
+    z.object({
+      username: z.string().min(1),
+      password: z.string().min(1),
+    })
+  ),
   async (c) => {
     const { username, password } = c.req.valid()
 
-    try {
-      const user = await c.env.DB
-        .prepare('SELECT id, password_hash FROM users WHERE username = ?')
-        .bind(username)
-        .first<{ id: number; password_hash: string }>()
+    const user = await c.env.DB.prepare(
+      'SELECT id, password_hash FROM users WHERE username = ?'
+    )
+      .bind(username)
+      .first<{ id: number; password_hash: string }>()
 
-      if (!user || password !== user.password_hash) {  // ← En producción deberías usar bcrypt
-        return c.json({ error: 'Credenciales inválidas' }, 401)
-      }
-
-      const token = sign({ userId: user.id }, c.env.JWT_SECRET, { expiresIn: '24h' })
-      return c.json({ token })
-    } catch (err) {
-      console.error(err)
-      return c.json({ error: 'Error interno del servidor' }, 500)
+    if (!user || password !== user.password_hash) {
+      return c.json({ error: 'Credenciales inválidas' }, 401)
     }
+
+    const secret = new TextEncoder().encode(c.env.JWT_SECRET)
+
+    const token = await new SignJWT({ userId: user.id })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('24h')
+      .sign(secret)
+
+    return c.json({ token })
   }
 )
 
-// Dashboard
+/* ================================
+   DASHBOARD
+================================ */
+
 app.get('/', auth, async (c) => {
-  try {
-    const [reservations, income, availableBoats] = await Promise.all([
-      c.env.DB.prepare('SELECT COUNT(*) as count FROM reservations').first<{ count: number }>(),
-      c.env.DB.prepare('SELECT SUM(amount) as total FROM invoices WHERE paid = 1').first<{ total: number | null }>(),
-      c.env.DB.prepare('SELECT COUNT(*) as count FROM boats WHERE available = 1').first<{ count: number }>(),
-    ])
-
-    return c.html(html`
-      <!doctype html>
-      <html data-bs-theme="dark" lang="es">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Dashboard - Alquiler Botes & Jetskis</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <style>
-          body { background: #0d1117; color: #c9d1d9; }
-          .card { background: linear-gradient(135deg, #161b22, #0d1117); border: none; }
-        </style>
-      </head>
-      <body>
-        <nav class="navbar navbar-expand-lg bg-dark border-bottom border-secondary fixed-top">
-          <div class="container-fluid">
-            <a class="navbar-brand text-white" href="/">Alquiler Botes & Jetskis</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-              <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-              <ul class="navbar-nav ms-auto">
-                <li class="nav-item"><a class="nav-link" href="/clients">Clientes</a></li>
-                <li class="nav-item"><a class="nav-link" href="/boats">Botes</a></li>
-                <li class="nav-item"><a class="nav-link" href="/reservations">Reservas</a></li>
-                <li class="nav-item"><a class="nav-link" href="/invoices">Facturas</a></li>
-                <li class="nav-item"><a class="nav-link" href="/cash">Caja</a></li>
-                <li class="nav-item"><a class="nav-link" href="/reports">Reportes</a></li>
-                <li class="nav-item"><a class="nav-link" href="/maintenance">Mantenimiento</a></li>
-              </ul>
-            </div>
-          </div>
-        </nav>
-
-        <div class="container mt-5 pt-5">
-          <h1 class="mb-5 text-center">Dashboard</h1>
-          <div class="row g-4">
-            <div class="col-md-4">
-              <div class="card shadow text-center">
-                <div class="card-body">
-                  <h5 class="card-title">Reservas Totales</h5>
-                  <p class="display-4 fw-bold">${reservations?.count ?? 0}</p>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="card shadow text-center">
-                <div class="card-body">
-                  <h5 class="card-title">Ingresos (Pagados)</h5>
-                  <p class="display-4 fw-bold">$${Number(income?.total ?? 0).toFixed(2)}</p>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="card shadow text-center">
-                <div class="card-body">
-                  <h5 class="card-title">Botes Disponibles</h5>
-                  <p class="display-4 fw-bold">${availableBoats?.count ?? 0}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `)
-  } catch (err) {
-    console.error(err)
-    return c.text('Error al cargar el dashboard', 500)
-  }
-})
-
-// Rutas de Clientes (ejemplo corregido - las demás siguen patrón similar)
-app.get('/clients', auth, async (c) => {
-  const { results: clients = [] } = await c.env.DB
-    .prepare('SELECT * FROM clients ORDER BY name')
-    .all()
+  const [reservations, income, availableBoats] = await Promise.all([
+    c.env.DB.prepare('SELECT COUNT(*) as count FROM reservations')
+      .first<{ count: number }>(),
+    c.env.DB.prepare(
+      'SELECT SUM(amount) as total FROM invoices WHERE paid = 1'
+    ).first<{ total: number | null }>(),
+    c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM boats WHERE available = 1'
+    ).first<{ count: number }>(),
+  ])
 
   return c.html(html`
     <!doctype html>
-    <html data-bs-theme="dark" lang="es">
+    <html lang="es">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Clientes</title>
+      <title>Dashboard</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-      <style>body {background:#0d1117; color:#c9d1d9;}</style>
+      <style>
+        body { background:#0d1117; color:#c9d1d9; }
+        .card { background:#161b22; border:none; }
+      </style>
     </head>
     <body>
-      <!-- Navbar igual que en dashboard... -->
-      <nav class="navbar navbar-expand-lg bg-dark border-bottom border-secondary fixed-top">
-        <!-- ... mismo navbar que en dashboard ... -->
+      <nav class="navbar navbar-dark bg-dark p-3">
+        <div class="container-fluid">
+          <span class="navbar-brand">Alquiler Botes & Jetskis</span>
+          <a href="/login" class="btn btn-sm btn-outline-light">Cerrar sesión</a>
+        </div>
       </nav>
 
-      <div class="container mt-5 pt-5">
-        <h1 class="mb-4">Gestión de Clientes</h1>
-
-        <div class="card shadow mt-4">
-          <div class="card-body">
-            <table class="table table-dark table-hover">
-              <thead>
-                <tr><th>ID</th><th>Nombre</th><th>Email</th><th>Teléfono</th></tr>
-              </thead>
-              <tbody>
-                ${clients.map(client => html`
-                  <tr>
-                    <td>${client.id}</td>
-                    <td>${client.name}</td>
-                    <td>${client.email || '-'}</td>
-                    <td>${client.phone || '-'}</td>
-                  </tr>
-                `)}
-              </tbody>
-            </table>
+      <div class="container mt-5">
+        <div class="row g-4">
+          <div class="col-md-4">
+            <div class="card text-center p-4">
+              <h5>Reservas</h5>
+              <h1>${reservations?.count ?? 0}</h1>
+            </div>
           </div>
-        </div>
-
-        <div class="card shadow mt-5">
-          <div class="card-body">
-            <h3>Agregar Cliente</h3>
-            <form action="/api/clients" method="POST">
-              <div class="mb-3">
-                <input name="name" class="form-control bg-dark text-white border-secondary" placeholder="Nombre completo" required>
-              </div>
-              <div class="mb-3">
-                <input name="email" type="email" class="form-control bg-dark text-white border-secondary" placeholder="Email">
-              </div>
-              <div class="mb-3">
-                <input name="phone" class="form-control bg-dark text-white border-secondary" placeholder="Teléfono">
-              </div>
-              <button type="submit" class="btn btn-primary">Agregar</button>
-            </form>
+          <div class="col-md-4">
+            <div class="card text-center p-4">
+              <h5>Ingresos</h5>
+              <h1>$${Number(income?.total ?? 0).toFixed(2)}</h1>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card text-center p-4">
+              <h5>Botes Disponibles</h5>
+              <h1>${availableBoats?.count ?? 0}</h1>
+            </div>
           </div>
         </div>
       </div>
@@ -252,31 +178,5 @@ app.get('/clients', auth, async (c) => {
     </html>
   `)
 })
-
-app.post('/api/clients', auth,
-  zValidator('form', z.object({
-    name:   z.string().min(1),
-    email:  z.string().email().optional().or(z.literal('')),
-    phone:  z.string().optional().or(z.literal(''))
-  })),
-  async (c) => {
-    const { name, email, phone } = c.req.valid()
-
-    await c.env.DB.prepare(
-      'INSERT INTO clients (name, email, phone) VALUES (?, ?, ?)'
-    )
-      .bind(name, email || null, phone || null)
-      .run()
-
-    return c.redirect('/clients')
-  }
-)
-
-// ... el resto de rutas (boats, reservations, invoices, cash, reports, maintenance)
-// siguen el mismo patrón corregido:
-// 1. zValidator('form', schema) → c.req.valid() sin parámetro
-// 2. Uso de .first<{tipo}>()
-// 3. Manejo básico de errores
-// 4. Valores null/undefined protegidos con ?? o ||
 
 export default app
